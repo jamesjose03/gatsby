@@ -58,7 +58,7 @@ apiRunnerAsync(`onClientEntry`).then(() => {
 
   class LocationHandler extends React.Component {
     render() {
-      let { location } = this.props
+      const { location } = this.props
       return (
         <EnsureResources location={location}>
           {({ pageResources, location }) => (
@@ -117,12 +117,10 @@ apiRunnerAsync(`onClientEntry`).then(() => {
     })
   }
 
-  loader.loadPage(browserLoc.pathname).then(page => {
+  publicLoader.loadPage(browserLoc.pathname).then(page => {
     if (!page || page.status === `error`) {
       throw new Error(
-        `page resources for ${
-          browserLoc.pathname
-        } not found. Not rendering React`
+        `page resources for ${browserLoc.pathname} not found. Not rendering React`
       )
     }
     const Root = () => (

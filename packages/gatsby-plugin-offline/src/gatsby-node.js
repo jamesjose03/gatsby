@@ -45,19 +45,15 @@ exports.onPostBuild = (args, pluginOptions) => {
     `webpack-runtime`,
     `component---node-modules-gatsby-plugin-offline-app-shell-js`,
   ])
+  const appFile = files.find(file => file.startsWith(`app-`))
 
   // Remove the custom prefix (if any) so Workbox can find the files.
   // This is added back at runtime (see modifyUrlPrefix) in order to serve
   // from the correct location.
   const omitPrefix = path => path.slice(pathPrefix.length)
 
-  const criticalFilePaths = _.uniq(
-    _.concat(
-      getResourcesFromHTML(`${process.cwd()}/${rootDir}/404.html`),
-      getResourcesFromHTML(
-        `${process.cwd()}/${rootDir}/offline-plugin-app-shell-fallback/index.html`
-      )
-    )
+  const criticalFilePaths = getResourcesFromHTML(
+    `${process.cwd()}/${rootDir}/offline-plugin-app-shell-fallback/index.html`
   ).map(omitPrefix)
 
   const globPatterns = files.concat([
@@ -74,7 +70,7 @@ exports.onPostBuild = (args, pluginOptions) => {
     importWorkboxFrom: `local`,
     globDirectory: rootDir,
     globPatterns,
-    modifyUrlPrefix: {
+    modifyURLPrefix: {
       // If `pathPrefix` is configured by user, we should replace
       // the default prefix with `pathPrefix`.
       "/": `${pathPrefix}/`,
@@ -82,39 +78,38 @@ exports.onPostBuild = (args, pluginOptions) => {
     cacheId: `gatsby-plugin-offline`,
     // Don't cache-bust JS or CSS files, and anything in the static directory,
     // since these files have unique URLs and their contents will never change
-    dontCacheBustUrlsMatching: /(\.js$|\.css$|static\/)/,
+    dontCacheBustURLsMatching: /(\.js$|\.css$|static\/)/,
     runtimeCaching: [
       {
         // Use cacheFirst since these don't need to be revalidated (same RegExp
         // and same reason as above)
         urlPattern: /(\.js$|\.css$|static\/)/,
-        handler: `cacheFirst`,
+        handler: `CacheFirst`,
       },
       {
         // page-data.json files are not content hashed
         urlPattern: /^https?:.*\page-data\/.*\/page-data\.json/,
-        handler: `networkFirst`,
+        handler: `NetworkFirst`,
       },
       {
         // Add runtime caching of various other page resources
         urlPattern: /^https?:.*\.(png|jpg|jpeg|webp|svg|gif|tiff|js|woff|woff2|json|css)$/,
-        handler: `staleWhileRevalidate`,
+        handler: `StaleWhileRevalidate`,
       },
       {
         // Google Fonts CSS (doesn't end in .css so we need to specify it)
         urlPattern: /^https?:\/\/fonts\.googleapis\.com\/css/,
-        handler: `staleWhileRevalidate`,
+        handler: `StaleWhileRevalidate`,
       },
     ],
     skipWaiting: true,
     clientsClaim: true,
   }
 
-  // pluginOptions.plugins is assigned automatically when the user hasn't
-  // specified custom options - Workbox throws an error with unsupported
-  // parameters, so delete it.
-  delete pluginOptions.plugins
-  const combinedOptions = _.defaults(pluginOptions, options)
+  const combinedOptions = {
+    ...options,
+    ...pluginOptions.workboxConfig,
+  }
 
   const idbKeyvalFile = `idb-keyval-iife.min.js`
   const idbKeyvalSource = require.resolve(`idb-keyval/dist/${idbKeyvalFile}`)
@@ -130,8 +125,20 @@ exports.onPostBuild = (args, pluginOptions) => {
       const swAppend = fs
         .readFileSync(`${__dirname}/sw-append.js`, `utf8`)
         .replace(/%pathPrefix%/g, pathPrefix)
+        .replace(/%appFile%/g, appFile)
 
       fs.appendFileSync(`public/sw.js`, `\n` + swAppend)
+
+      if (pluginOptions.appendScript) {
+        let userAppend
+        try {
+          userAppend = fs.readFileSync(pluginOptions.appendScript, `utf8`)
+        } catch (e) {
+          throw new Error(`Couldn't find the specified offline inject script`)
+        }
+        fs.appendFileSync(`public/sw.js`, `\n` + userAppend)
+      }
+
       console.log(
         `Generated ${swDest}, which will precache ${count} files, totaling ${size} bytes.`
       )
